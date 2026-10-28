@@ -162,10 +162,9 @@
   <div id="message" aria-live="polite"></div>
   <p class="note">Xadrez para dois jogadores no mesmo computador.</p>
 
-  <script type="module">
-    import { Chess } from
-      "https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js";
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 
+<script>
     const game = new Chess();
 
     const board = document.getElementById("board");
