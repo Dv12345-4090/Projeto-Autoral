@@ -1,0 +1,367 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Xadrez Online</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      background: #171b24;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+      color: #f0c674;
+    }
+
+    #status {
+      margin: 12px;
+      font-size: 18px;
+      text-align: center;
+    }
+
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      width: min(90vw, 560px);
+      aspect-ratio: 1;
+      border: 5px solid #35291f;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .square {
+      border: none;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      cursor: pointer;
+      font-size: clamp(24px, 7vw, 54px);
+      user-select: none;
+    }
+
+    .light {
+      background: #f0d9b5;
+    }
+
+    .dark {
+      background: #779556;
+    }
+
+    .square.selected {
+      background: #f6f669;
+    }
+
+    .square.possible::after {
+      content: "";
+      width: 25%;
+      height: 25%;
+      border-radius: 50%;
+      background: #263d2c;
+      opacity: 0.55;
+      position: absolute;
+    }
+
+    .square.capture::after {
+      content: "";
+      width: 85%;
+      height: 85%;
+      border: 5px solid #bd3535;
+      border-radius: 50%;
+      position: absolute;
+    }
+
+    .piece {
+      position: relative;
+      z-index: 1;
+      line-height: 1;
+    }
+
+    .white-piece {
+      color: #fff;
+      text-shadow:
+        -1px -1px 1px #333,
+         1px -1px 1px #333,
+        -1px  1px 1px #333,
+         1px  1px 1px #333,
+         0 3px 2px #333;
+    }
+
+    .black-piece {
+      color: #202020;
+      text-shadow: 0 1px 1px #aaa;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    button.action {
+      border: none;
+      border-radius: 8px;
+      padding: 12px 18px;
+      font-size: 15px;
+      cursor: pointer;
+      background: #f0c674;
+      color: #171b24;
+      font-weight: bold;
+    }
+
+    button.action:hover {
+      background: #ffdc91;
+    }
+
+    #message {
+      min-height: 24px;
+      margin-top: 14px;
+      text-align: center;
+      color: #f0c674;
+    }
+
+    .note {
+      font-size: 13px;
+      color: #c1c5ce;
+      text-align: center;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>♟ Xadrez Online</h1>
+  <div id="status">Carregando o jogo...</div>
+  <div id="board" aria-label="Tabuleiro de xadrez"></div>
+
+  <div class="buttons">
+    <button class="action" id="restart">Novo jogo</button>
+    <button class="action" id="flip">Girar tabuleiro</button>
+    <button class="action" id="undo">Desfazer jogada</button>
+  </div>
+
+  <div id="message" aria-live="polite"></div>
+  <p class="note">Xadrez para dois jogadores no mesmo computador.</p>
+
+  <script type="module">
+    import { Chess } from
+      "https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js";
+
+    const game = new Chess();
+
+    const board = document.getElementById("board");
+    const status = document.getElementById("status");
+    const message = document.getElementById("message");
+
+    const symbols = {
+      wk: "♔", wq: "♕", wr: "♖", wb: "♗",
+      wn: "♘", wp: "♙",
+      bk: "♚", bq: "♛", br: "♜",
+      bb: "♝", bn: "♞", bp: "♟"
+    };
+
+    let selected = null;
+    let possibleMoves = [];
+    let flipped = false;
+
+    function renderBoard() {
+      board.innerHTML = "";
+
+      const files = flipped
+        ? ["h", "g", "f", "e", "d", "c", "b", "a"]
+        : ["a", "b", "c", "d", "e", "f", "g", "h"];
+
+      const ranks = flipped
+        ? [1, 2, 3, 4, 5, 6, 7, 8]
+        : [8, 7, 6, 5, 4, 3, 2, 1];
+
+      ranks.forEach((rank, row) => {
+        files.forEach((file, col) => {
+          const squareName = file + rank;
+          const piece = game.get(squareName);
+          const square = document.createElement("button");
+
+          square.type = "button";
+          square.className =
+            "square " + ((row + col) % 2 === 0 ? "light" : "dark");
+
+          square.setAttribute("aria-label",
+            squareName + (piece ? ", peça presente" : ", casa vazia"));
+
+          if (squareName === selected) {
+            square.classList.add("selected");
+          }
+
+          const move = possibleMoves.find(
+            m => m.to === squareName
+          );
+
+          if (move) {
+            square.classList.add(
+              move.captured ? "capture" : "possible"
+            );
+          }
+
+          if (piece) {
+            const span = document.createElement("span");
+            span.className =
+              "piece " +
+              (piece.color === "w" ? "white-piece" : "black-piece");
+            span.textContent = symbols[piece.color + piece.type];
+            square.appendChild(span);
+          }
+
+          square.addEventListener("click", () => {
+            handleSquareClick(squareName);
+          });
+
+          board.appendChild(square);
+        });
+      });
+
+      updateStatus();
+    }
+
+    function updateStatus() {
+      if (game.game_over()) {
+        if (game.in_checkmate()) {
+          status.textContent =
+            "Xeque-mate! " +
+            (game.turn() === "w" ? "Pretas" : "Brancas") +
+            " venceram!";
+        } else if (game.in_draw()) {
+          status.textContent = "Empate!";
+        } else {
+          status.textContent = "Fim de jogo!";
+        }
+        return;
+      }
+
+      status.textContent =
+        "Vez das " +
+        (game.turn() === "w" ? "brancas" : "pretas") +
+        (game.in_check() ? " — XEQUE!" : "");
+
+      if (game.in_check()) {
+        message.textContent = "Atenção: seu rei está em xeque!";
+      } else {
+        message.textContent = "";
+      }
+    }
+
+    function handleSquareClick(squareName) {
+      if (game.game_over()) return;
+
+      const piece = game.get(squareName);
+
+      if (selected) {
+        const move = possibleMoves.find(
+          m => m.to === squareName
+        );
+
+        if (move) {
+          let promotion = "q";
+
+          if (
+            piece &&
+            piece.type === "p" &&
+            ((piece.color === "w" && squareName.endsWith("8")) ||
+             (piece.color === "b" && squareName.endsWith("1"))
+            )
+          ) {
+            promotion = (
+              prompt("Promover o peão para: dama, torre, bispo ou cavalo? (d/t/b/c)", "d")
+              || "d"
+            ).toLowerCase();
+
+            promotion = {
+              d: "q", t: "r", b: "b", c: "n"
+            }[promotion] || "q";
+          } else {
+            const movingPiece = game.get(selected);
+
+            if (
+              movingPiece &&
+              movingPiece.type === "p" &&
+              (squareName.endsWith("8") ||
+               squareName.endsWith("1"))
+            ) {
+              promotion = "q";
+            }
+          }
+
+          try {
+            game.move({
+              from: selected,
+              to: squareName,
+              promotion
+            });
+            selected = null;
+            possibleMoves = [];
+            renderBoard();
+            return;
+          } catch (error) {
+            // Jogada inválida: permite escolher outra casa.
+          }
+        }
+      }
+
+      if (piece && piece.color === game.turn()) {
+        selected = squareName;
+        possibleMoves = game.moves({
+          square: squareName,
+          verbose: true
+        });
+      } else {
+        selected = null;
+        possibleMoves = [];
+      }
+
+      renderBoard();
+    }
+
+    document.getElementById("restart").addEventListener("click", () => {
+      game.reset();
+      selected = null;
+      possibleMoves = [];
+      message.textContent = "";
+      renderBoard();
+    });
+
+    document.getElementById("flip").addEventListener("click", () => {
+      flipped = !flipped;
+      renderBoard();
+    });
+
+    document.getElementById("undo").addEventListener("click", () => {
+      if (game.undo()) {
+        selected = null;
+        possibleMoves = [];
+        message.textContent = "Última jogada desfeita.";
+        renderBoard();
+      }
+    });
+
+    renderBoard();
+  </script>
+</body>
+</html>
